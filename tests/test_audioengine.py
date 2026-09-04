@@ -1,5 +1,6 @@
 from englishcoach.engines.AudioEngine import AudioEngine
 
+
 class TestAudioEngine:
     def test_initialization(self):
         engine = AudioEngine("test.wav")
