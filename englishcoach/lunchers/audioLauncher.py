@@ -12,6 +12,8 @@ class AudioLauncher:
         return transcription
 
     def save_transcription(self,transcription):
+        """"""
+        return None
         
 
     def run(self, duration):
