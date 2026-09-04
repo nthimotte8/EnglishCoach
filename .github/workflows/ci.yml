@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Installer Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      
+      - name: Installer PortAudio (dépendance système pour sounddevice)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
       - name: Installer Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -

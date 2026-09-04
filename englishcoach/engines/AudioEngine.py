@@ -1,6 +1,7 @@
-import sounddevice as sd
 import scipy.io.wavfile as wavfile
+import sounddevice as sd
 from faster_whisper import WhisperModel
+
 
 class AudioEngine:
     def __init__(self, filename, samplerate=44100):

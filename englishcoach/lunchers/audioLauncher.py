@@ -1,5 +1,6 @@
 from englishcoach.engines.AudioEngine import AudioEngine
 
+
 class AudioLauncher:
     def __init__(self, filename):
         self.engine = AudioEngine(filename)
@@ -12,6 +13,8 @@ class AudioLauncher:
         return transcription
 
     def save_transcription(self,transcription):
+        """"""
+        return None
         
 
     def run(self, duration):
