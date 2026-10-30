@@ -1,9 +1,9 @@
 // Offline support: the app shell and its libraries are cached after the first visit.
 // AI models are cached separately by WebLLM and transformers.js.
-const VERSION = 'ec-v1';
+const VERSION = 'ec-v2';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'icon.svg',
-  'js/main.js', 'js/ai.js', 'js/coach.js', 'js/db.js', 'js/players.js', 'js/repo.js', 'js/speech.js', 'js/srs.js', 'js/textproc.js', 'js/ui.js',
+  'js/main.js', 'js/ai.js', 'js/podcasts.js', 'js/coach.js', 'js/db.js', 'js/players.js', 'js/repo.js', 'js/speech.js', 'js/srs.js', 'js/textproc.js', 'js/ui.js',
   'js/llm-worker.js', 'js/whisper-worker.js',
   'js/views/chat.js', 'js/views/coach.js', 'js/views/conversation.js', 'js/views/exercise.js', 'js/views/gate.js', 'js/views/media.js',
   'js/views/new-material.js', 'js/views/practice.js', 'js/views/progress.js', 'js/views/settings.js', 'js/views/vocab.js',

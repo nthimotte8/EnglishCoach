@@ -50,8 +50,8 @@ export async function mount(view) {
     cleanup = coachGate(body, () => {
       cleanup = mountChat(body, {
         kind: 'conversation', title: `Conversation · ${sc.label}`, voiceFirst: true, them: themLabel(sc.key),
-        first: () => coach.roleplayTurn(sc, custom, level, [], null),
-        turn: (history, message) => coach.roleplayTurn(sc, custom, level, history, message),
+        first: (onReply) => coach.roleplayTurn(sc, custom, level, [], null, onReply),
+        turn: (history, message, onReply) => coach.roleplayTurn(sc, custom, level, history, message, onReply),
         evaluate: (messages, speech) => coach.evaluate(`a spoken role play: ${sc.key === 'custom' ? custom : sc.label}`, messages, speech),
         onRestart: () => play(sc, custom),
       });

@@ -5,17 +5,19 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 
 env.allowLocalModels = false; // models come from the Hugging Face hub, then from the browser cache
 
-// base.en is a good balance of speed and accuracy; tiny.en is the fallback for weak machines.
-const MODELS = ['Xenova/whisper-base.en', 'Xenova/whisper-tiny.en'];
+// "rapide" (tiny.en, ~40 Mo) is about twice as fast as "precis" (base.en, ~150 Mo), slightly less accurate.
+const MODELS = { rapide: ['Xenova/whisper-tiny.en'], precis: ['Xenova/whisper-base.en', 'Xenova/whisper-tiny.en'] };
 let asr = null;
+let asrKey = null;
 let loading = null;
 
 async function hasWebGPU() {
   try { return !!(navigator.gpu && (await navigator.gpu.requestAdapter())); } catch { return false; }
 }
 
-function load(id) {
-  if (asr) return Promise.resolve(asr);
+function load(id, key = 'precis') {
+  if (asr && asrKey === key) return Promise.resolve(asr);
+  if (asr && asrKey !== key) { asr.dispose?.(); asr = null; }
   if (!loading) {
     loading = (async () => {
       const device = (await hasWebGPU()) ? 'webgpu' : 'wasm';
@@ -28,13 +30,16 @@ function load(id) {
         self.postMessage({ id, type: 'progress', progress: t ? l / t : 0, text: 'Téléchargement de la reconnaissance vocale…' });
       };
       let lastError;
-      for (const model of MODELS) {
-        try {
-          asr = await pipeline('automatic-speech-recognition', model, {
-            device, dtype: device === 'webgpu' ? 'fp32' : 'q8', progress_callback,
-          });
-          return asr;
-        } catch (e) { lastError = e; }
+      // quantised decoder first (much faster on the GPU); plain weights if a model has no such file
+      const dtypes = device === 'webgpu' ? [{ encoder_model: 'fp32', decoder_model_merged: 'q4' }, 'fp32'] : ['q8'];
+      for (const model of MODELS[key] ?? MODELS.precis) {
+        for (const dtype of dtypes) {
+          try {
+            asr = await pipeline('automatic-speech-recognition', model, { device, dtype, progress_callback });
+            asrKey = key;
+            return asr;
+          } catch (e) { lastError = e; }
+        }
       }
       throw lastError;
     })().finally(() => { loading = null; });
@@ -45,7 +50,7 @@ function load(id) {
 self.onmessage = async ({ data }) => {
   const { id, type } = data;
   try {
-    const run = await load(id);
+    const run = await load(id, data.model);
     if (type === 'load') return self.postMessage({ id, type: 'result', text: '', chunks: [] });
     const long = data.audio.length > 16000 * 30;
     const base = { chunk_length_s: 30, stride_length_s: long ? 5 : undefined };

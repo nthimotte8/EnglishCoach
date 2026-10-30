@@ -24,8 +24,8 @@ export async function mount(view) {
     cleanup = coachGate(body, () => {
       cleanup = mountChat(body, {
         kind: 'coach', title: material.title, materialId: material.id, them: 'Coach',
-        first: () => coach.contentTurn(material, [], null),
-        turn: (history, message) => coach.contentTurn(material, history, message),
+        first: (onReply) => coach.contentTurn(material, [], null, onReply),
+        turn: (history, message, onReply) => coach.contentTurn(material, history, message, onReply),
         evaluate: (messages, speech) => coach.evaluate(`a discussion about the content "${material.title}"`, messages, speech),
         onRestart: start,
       });

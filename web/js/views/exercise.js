@@ -1,7 +1,7 @@
 // Exercises on the current content. The two oral ones come with a detailed pronunciation report.
 import * as repo from '../repo.js';
 import { playItem } from '../players.js';
-import { Recorder, speak, stopSpeaking, transcribe } from '../speech.js';
+import { Recorder, speak, stopSpeaking, transcribe, warmUpAsr } from '../speech.js';
 import { align, analyseSpeech, buildExercise, EXERCISES, exerciseUnits, norm, words } from '../textproc.js';
 import { $, $$, html, icon, markup, minutesSince, render, toast } from '../ui.js';
 import { hasMedia, mediaHtml, mountMedia } from './media.js';
@@ -24,6 +24,7 @@ export async function mount(view, [kind]) {
   const box = $('#ex', view);
   if (!items.length) { render(box, html`<p class="notice">Ce contenu est trop court pour cet exercice.</p>`); return () => {}; }
   media = mountMedia(view, m);
+  if (kind === 'lecture' || kind === 'repetition') warmUpAsr();
   const listen = (item, slow) => playItem(media.player, item, { slow });
 
   const head = () => html`<div class="row between"><span class="chip">${st.i + 1} / ${items.length}</span>

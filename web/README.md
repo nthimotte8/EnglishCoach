@@ -10,6 +10,7 @@ Le site web reprend les principes de l'app iPhone : tout tourne **dans le naviga
 | **Analyse de prononciation** | Whisper donne l'horodatage de chaque mot. Tu vois les mots reconnus ou non (clique pour les écouter), une frise de ton débit avec les pauses longues, tes hésitations (« um », « euh »), et tu réécoutes ta voix à côté du modèle. |
 
 Il y a aussi :
+- la **recherche de podcasts** dans l'annuaire Apple Podcasts, plus 17 suggestions classées par niveau CECRL et par thème (apprendre l'anglais, business, tech et data, actualité, science, culture) ;
 - une source **Fichier audio / vidéo** (n'importe quel MP3, M4A, MP4… transcrit par Whisper) ;
 - une **série de jours** consécutifs dans la progression ;
 - l'**export et l'import** de toutes tes données ;
@@ -39,6 +40,14 @@ Le code est en JavaScript moderne, sans étape de build : les fichiers de `web/`
   puis ouvre http://localhost:8000.
 
 Au premier usage du coach, le modèle se télécharge (environ 2,5 Go pour « Équilibré »), une seule fois. Whisper pèse environ 150 Mo. Les deux restent ensuite dans le cache du navigateur.
+
+## Vitesse sur les ordinateurs modestes
+
+Sur un Mac M1 ou un portable avec 8 Go de mémoire :
+- **La réponse du coach s'affiche pendant qu'elle s'écrit**, et la voix la lit dès qu'elle est complète, avant même la fin des corrections.
+- **Le coach se charge en arrière-plan** à l'ouverture du site s'il est déjà téléchargé.
+- **La vitesse est mesurée**. Si elle est faible, le site propose de passer au niveau « Léger », environ deux fois plus rapide.
+- **La reconnaissance vocale est en mode « Rapide »** par défaut (Whisper tiny, environ deux fois plus rapide), et elle est préchargée dès l'ouverture d'un exercice oral ou d'une conversation. Tu peux passer en mode « Précis » dans Réglages.
 
 ## Limites
 

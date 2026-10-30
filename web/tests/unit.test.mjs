@@ -1,10 +1,11 @@
 // Run with: node --test web/tests
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { suggest, toEpisode, toShow } from '../js/podcasts.js';
 import { cardKey, dueCards, isMastered, newCard, review } from '../js/srs.js';
 import {
   align, analyseSpeech, buildExercise, exerciseUnits, extractJson, linesFromSentences, linesFromTimedWords, parseFeed,
-  parseTranscript, youtubeId,
+  parseTranscript, partialField, youtubeId,
 } from '../js/textproc.js';
 
 const YT = `0:12
@@ -120,4 +121,32 @@ test('spaced repetition schedules further after each success', () => {
   const due = dueCards([{ due: t0 + 5 }, { due: t0 - 10 }, { due: t0 - 5 }], t0);
   assert.deepEqual(due.map((x) => x.due), [t0 - 10, t0 - 5]);
   assert.equal(cardKey('  Catch-Up!  '), 'catchup');
+});
+
+test('a streamed JSON field is readable before the JSON is complete', () => {
+  assert.deepEqual(partialField('', 'reply'), { value: '', done: false });
+  assert.deepEqual(partialField('{"reply": "Hello, ho', 'reply'), { value: 'Hello, ho', done: false });
+  assert.deepEqual(partialField('{"reply": "He said \\"hi\\"\\nthen', 'reply'), { value: 'He said "hi"\nthen', done: false });
+  assert.deepEqual(partialField('{"reply": "Done.", "corrections": [', 'reply'), { value: 'Done.', done: true });
+  assert.deepEqual(partialField('{"reply": "caf\\u00e9', 'reply'), { value: 'café', done: false });
+  assert.deepEqual(partialField('{"reply": "cut \\u00', 'reply'), { value: 'cut ', done: false });
+});
+
+test('podcast suggestions follow the learner level and theme', () => {
+  const b1 = suggest('B1');
+  assert.ok(b1[0].fit && b1[0].levels.some((l) => ['A2', 'B1', 'B2'].includes(l)));
+  assert.ok(b1.findIndex((s) => s.name === 'Data Engineering Podcast') > b1.findIndex((s) => s.name === '6 Minute English'));
+  const c1 = suggest('C1');
+  assert.ok(c1.slice(0, 6).every((s) => s.fit));
+  assert.ok(suggest(null, 'tech').every((s) => s.theme === 'tech'));
+  assert.equal(suggest(null).length, suggest(null, 'tous').length);
+});
+
+test('directory results are normalised', () => {
+  assert.deepEqual(toShow({ collectionId: 7, collectionName: 'Daily', artistName: 'BBC', artworkUrl600: 'a.jpg', primaryGenreName: 'Education', feedUrl: 'f', trackCount: 3 }),
+    { id: 7, title: 'Daily', author: 'BBC', artwork: 'a.jpg', genre: 'Education', feedUrl: 'f', count: 3 });
+  assert.deepEqual(toEpisode({ trackName: 'Ep 1', episodeUrl: 'https://x/ep.mp3', trackTimeMillis: 361000, releaseDate: '2026-10-01', shortDescription: '<p>Hi  there</p>' }),
+    { title: 'Ep 1', audioUrl: 'https://x/ep.mp3', duration: 361, published: '2026-10-01', description: 'Hi there' });
+  assert.equal(toEpisode({ trackName: 'Video', episodeUrl: 'v.mp4', episodeContentType: 'video' }), null);
+  assert.equal(toEpisode({ trackName: 'No audio' }), null);
 });

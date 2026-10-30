@@ -1,16 +1,14 @@
 // Add a content: podcast, audio/video file, YouTube video + transcript, pasted text, or a text written by the coach.
 import * as coach from '../coach.js';
 import * as repo from '../repo.js';
+import { getSetting } from '../db.js';
+import { episodes, searchShows, suggest, THEMES } from '../podcasts.js';
 import { decode, onAsrProgress, transcribe } from '../speech.js';
 import { LEVELS, linesFromSentences, linesFromTimedWords, parseFeed, parseTranscript, youtubeId } from '../textproc.js';
 import { $, $$, html, icon, render, toast } from '../ui.js';
 import { coachGate } from './gate.js';
 
 const MAX_MINUTES = 15;
-const FEEDS = [
-  { name: 'BBC 6 Minute English', feed: 'https://podcasts.files.bbci.co.uk/p02pc9tn.rss' },
-  { name: 'VOA Learning English', feed: 'https://learningenglish.voanews.com/podcast/?count=30' },
-];
 const TOPICS = ['Technologie', 'Business', 'Data et IA', 'Voyage', 'Science', 'Culture', 'Vie quotidienne', 'Entretien d’embauche'];
 const MODES = [['podcast', 'Podcast'], ['fichier', 'Fichier audio / vidéo'], ['youtube', 'YouTube'], ['texte', 'Texte'], ['theme', 'Thème']];
 
@@ -22,14 +20,20 @@ export async function mount(view) {
       <p>Tout est transcrit et analysé dans ton navigateur, rien n’est envoyé sur un serveur.</p></div>
       <a class="btn" href="#pratiquer">Annuler</a></div>
     <div class="seg" role="group" aria-label="Source">${MODES.map(([k, l]) => html`<button type="button" data-mode="${k}" aria-pressed="${k === mode}">${l}</button>`)}</div>
+    <div class="thinking" id="busy" hidden aria-live="polite"><span class="dot"></span><span id="busy-t"></span></div>
+    <p class="notice" id="err" hidden role="alert"></p>
     <div id="pane"></div>
-    <div class="thinking" id="busy" hidden><span class="dot"></span><span id="busy-t"></span></div>
-    <p class="notice" id="err" hidden></p>
   </div>`);
 
   const pane = $('#pane', view);
-  const setBusy = (t) => { $('#busy', view).hidden = !t; $('#busy-t', view).textContent = t || ''; $$('button', pane).forEach((b) => { b.disabled = !!t; }); };
-  const fail = (e) => { $('#err', view).hidden = false; $('#err', view).textContent = e?.message || String(e); setBusy(null); };
+  const setBusy = (t) => { if (t && $('#busy', view).hidden) setTimeout(() => $('#busy', view).scrollIntoView({ block: 'nearest', behavior: 'smooth' })); $('#busy', view).hidden = !t; $('#busy-t', view).textContent = t || ''; $$('button', pane).forEach((b) => { b.disabled = !!t; }); };
+  const fail = (e) => {
+    const box = $('#err', view);
+    box.hidden = false;
+    render(box, html`${e?.message || String(e)}${e?.link ? html` <a href="${e.link}" target="_blank" rel="noopener" download>Télécharger l’épisode</a>` : ''}`);
+    setBusy(null);
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
   const ok = async (m) => { await repo.createMaterial(m); location.hash = '#pratiquer'; };
   const clearErr = () => { $('#err', view).hidden = true; };
 
@@ -49,41 +53,118 @@ export async function mount(view) {
   }
 
   const panes = {
-    podcast() {
+    async podcast() {
+      const level = await getSetting('level');
+      let theme = 'tous';
       render(pane, html`<section class="panel">
-        <div class="row tight">${FEEDS.map((f) => html`<button class="pick" type="button" data-feed="${f.feed}">${f.name}</button>`)}</div>
-        <form class="row" id="feed-form" style="align-items:flex-end">
-          <label class="field" style="flex:1 1 320px">Ou le lien RSS d’un autre podcast
-            <input id="feed" type="url" inputmode="url" placeholder="https://…/feed.xml" autocomplete="off"></label>
-          <button class="btn" type="submit">Voir les épisodes</button></form>
-        <div id="eps" class="stack" style="gap:6px"></div>
-        <p class="hint">Certains podcasts empêchent les sites de lire leurs fichiers. Dans ce cas, télécharge l’épisode et utilise l’onglet « Fichier audio / vidéo ».</p>
-      </section>`);
-      const load = async (url) => {
-        clearErr(); setBusy('Chargement des épisodes…');
+          <form class="row" id="search" role="search" style="align-items:flex-end">
+            <label class="field" style="flex:1 1 320px">Rechercher un podcast
+              <input id="q" type="search" placeholder="Ex. data engineering, football, BBC, histoire…" autocomplete="off"></label>
+            <button class="btn primary" type="submit">Rechercher</button></form>
+          <div id="results" class="stack" style="gap:8px"></div>
+        </section>
+        <section class="panel" id="suggest-box">
+          <div class="row between"><h2>Suggestions${level ? ` pour ton niveau (${level})` : ''}</h2>
+            <span class="hint">Des podcasts pensés pour progresser, du plus simple au plus exigeant</span></div>
+          <div class="row tight" role="group" aria-label="Thème">${THEMES.map(([k, l]) => html`<button class="pick" type="button" data-theme="${k}" aria-pressed="${k === theme}">${l}</button>`)}</div>
+          <div class="grid3" id="sugg"></div>
+        </section>
+        <details class="panel"><summary class="label" style="cursor:pointer">Avancé : coller le lien RSS d’un podcast</summary>
+          <form class="row" id="feed-form" style="align-items:flex-end;margin-top:10px">
+            <label class="field" style="flex:1 1 320px">Lien RSS<input id="feed" type="url" inputmode="url" placeholder="https://…/feed.xml" autocomplete="off"></label>
+            <button class="btn" type="submit">Voir les épisodes</button></form></details>`);
+
+      const paintSuggestions = () => {
+        const list = suggest(level, theme);
+        render($('#sugg', pane), html`${list.map((s, i) => html`<button class="ex-card" type="button" data-sug="${i}">
+          <span class="skill">${s.levels.join('–')} · ${s.len}${level && !s.fit ? ' · hors niveau' : ''}</span>
+          <b>${s.name}</b><span>${s.by} · ${s.why}</span></button>`)}`);
+        for (const b of $$('[data-sug]', pane)) {
+          b.addEventListener('click', async () => {
+            const sug = list[Number(b.dataset.sug)];
+            clearErr(); setBusy(`Recherche de « ${sug.name} »…`);
+            try {
+              const found = await searchShows(sug.term, 5);
+              setBusy(null);
+              if (!found.length) throw new Error(`« ${sug.name} » est introuvable dans l’annuaire pour le moment.`);
+              openShow(found[0]);
+            } catch (e) { fail(e); }
+          });
+        }
+      };
+      for (const b of $$('[data-theme]', pane)) {
+        b.addEventListener('click', () => { theme = b.dataset.theme; $$('[data-theme]', pane).forEach((x) => x.setAttribute('aria-pressed', x === b)); paintSuggestions(); });
+      }
+      paintSuggestions();
+
+      $('#search', pane).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = $('#q', pane).value.trim();
+        if (!q) return;
+        clearErr(); setBusy('Recherche…');
         try {
-          let xml;
-          try { xml = await (await fetch(url)).text(); } catch { throw new Error('Ce podcast refuse d’être lu par un site web (protection CORS). Télécharge un épisode depuis ton appli de podcasts et importe-le dans « Fichier audio / vidéo ».'); }
-          const feed = parseFeed(xml);
+          const shows = await searchShows(q);
           setBusy(null);
-          render($('#eps', pane), html`<span class="label">${feed.show} · choisis un épisode (les ${MAX_MINUTES} premières minutes sont transcrites)</span>
-            ${feed.episodes.slice(0, 15).map((e, i) => html`<button class="ep" type="button" data-ep="${i}"><span>${e.title}</span>
-              <span class="hint">${e.duration ? `${Math.round(e.duration / 60)} min` : ''}</span></button>`)}`);
-          for (const b of $$('[data-ep]', pane)) b.addEventListener('click', () => episode(feed.show, feed.episodes[Number(b.dataset.ep)]));
+          render($('#results', pane), shows.length ? html`<span class="label">${shows.length} podcast${shows.length > 1 ? 's' : ''} trouvé${shows.length > 1 ? 's' : ''}</span>
+            <div class="grid3">${shows.map((sh, i) => html`<button class="show" type="button" data-show="${i}">
+              ${sh.artwork ? html`<img src="${sh.artwork}" alt="" loading="lazy" width="56" height="56">` : html`<span class="show-ph" aria-hidden="true">${icon.talk}</span>`}
+              <span class="stack" style="gap:2px;min-width:0"><b>${sh.title}</b><span class="hint">${sh.author}${sh.genre ? ` · ${sh.genre}` : ''}</span></span></button>`)}</div>`
+            : html`<p class="empty">Aucun podcast trouvé. Essaie des mots en anglais (ex. « travel », « startup »).</p>`);
+          for (const b of $$('[data-show]', pane)) b.addEventListener('click', () => openShow(shows[Number(b.dataset.show)]));
+        } catch (err) { fail(err); }
+      });
+
+      const openShow = async (sh) => {
+        clearErr(); setBusy(`Chargement des épisodes de « ${sh.title} »…`);
+        try {
+          const eps = await episodes(sh);
+          setBusy(null);
+          if (!eps.length) throw new Error('Aucun épisode audio trouvé pour ce podcast.');
+          showEpisodes(sh.title, eps, sh.artwork);
         } catch (e) { fail(e); }
+      };
+      const showEpisodes = (show, eps, artwork) => {
+        render($('#results', pane), html`<div class="row" style="gap:12px">
+            ${artwork ? html`<img src="${artwork}" alt="" width="64" height="64" style="border-radius:10px">` : ''}
+            <div class="stack" style="gap:2px;flex:1;min-width:0"><h2>${show}</h2>
+              <span class="hint">Choisis un épisode : les ${MAX_MINUTES} premières minutes sont transcrites. Les épisodes courts sont plus rapides.</span></div>
+            <button class="btn small" type="button" id="back-results">Fermer</button></div>
+          ${eps.slice(0, 20).map((e, i) => html`<button class="ep" type="button" data-ep="${i}">
+            <span class="stack" style="gap:2px;min-width:0;text-align:left"><span>${e.title}</span>${e.description ? html`<span class="hint">${e.description}</span>` : ''}</span>
+            <span class="hint tnum" style="white-space:nowrap">${e.duration ? `${Math.round(e.duration / 60)} min` : ''}${e.published ? html`<br>${new Date(e.published).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}</span></button>`)}`);
+        $('#results', pane).scrollIntoView({ block: 'start', behavior: 'smooth' });
+        $('#back-results', pane).addEventListener('click', () => render($('#results', pane), html``));
+        for (const b of $$('[data-ep]', pane)) b.addEventListener('click', () => episode(show, eps[Number(b.dataset.ep)]));
       };
       const episode = async (show, ep) => {
         clearErr(); setBusy('Téléchargement de l’épisode…');
         try {
           let blob;
-          try { blob = await (await fetch(ep.audioUrl)).blob(); } catch { throw new Error('Ce podcast ne laisse pas les sites télécharger ses épisodes. Télécharge-le toi-même puis importe-le dans « Fichier audio / vidéo ».'); }
+          try {
+            const res = await fetch(ep.audioUrl);
+            if (!res.ok) throw new Error();
+            blob = await res.blob();
+          } catch {
+            throw Object.assign(new Error('Ce podcast ne laisse pas les sites web lire ses fichiers audio. Télécharge l’épisode (lien ci-dessous) puis importe-le dans « Fichier audio / vidéo ».'), { link: ep.audioUrl });
+          }
           const { audio } = await decode(blob, MAX_MINUTES * 60);
           const lines = await transcribeAudio(audio, 'Transcription de l’épisode');
           await ok({ title: `${show} · ${ep.title}`.slice(0, 200), source: 'podcast', audioUrl: ep.audioUrl, lines });
         } catch (e) { fail(e); }
       };
-      for (const b of $$('[data-feed]', pane)) b.addEventListener('click', () => { $('#feed', pane).value = b.dataset.feed; load(b.dataset.feed); });
-      $('#feed-form', pane).addEventListener('submit', (e) => { e.preventDefault(); const u = $('#feed', pane).value.trim(); if (u) load(u); });
+      $('#feed-form', pane).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = $('#feed', pane).value.trim();
+        if (!url) return;
+        clearErr(); setBusy('Chargement des épisodes…');
+        try {
+          let xml;
+          try { xml = await (await fetch(url)).text(); } catch { throw new Error('Ce podcast refuse d’être lu par un site web. Cherche-le plutôt avec la recherche ci-dessus.'); }
+          const feed = parseFeed(xml);
+          setBusy(null);
+          showEpisodes(feed.show, feed.episodes.map((x) => ({ ...x, description: '' })), null);
+        } catch (err) { fail(err); }
+      });
     },
 
     fichier() {
