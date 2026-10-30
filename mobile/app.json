@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "English Coach",
+    "slug": "english-coach",
+    "scheme": "englishcoach",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nicolasthimotte.englishcoach",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-audio",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "English Coach écoute ta voix pour évaluer ta prononciation et transcrire tes réponses au coach.",
+          "speechRecognitionPermission": "La reconnaissance vocale se fait sur ton iPhone pour noter ta prononciation et transcrire les podcasts."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
