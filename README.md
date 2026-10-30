@@ -1,20 +1,30 @@
 # EnglishCoach
 
-App iPhone pour pratiquer l'anglais à l'oral, **entièrement hors ligne** : coach IA embarqué (Qwen 2.5 1.5B via llama.cpp), reconnaissance vocale iOS sur l'appareil, podcasts, vidéos YouTube, 5 exercices et suivi de progression. Aucune clé d'API ni serveur.
+Coach pour pratiquer l'anglais à l'oral, **entièrement local et gratuit** : l'IA tourne sur ton appareil, sans clé d'API, sans serveur et sans compte.
 
-Le code est dans [`mobile/`](mobile/), avec le guide complet dans [`mobile/README.md`](mobile/README.md).
+| Version | Dossier | Pour qui |
+|---|---|---|
+| **Site web** | [`web/`](web/) | Chrome ou Edge sur ordinateur. Coach plus puissant (3 à 8 milliards de paramètres), conversation libre à l'oral, analyse de prononciation, carnet de vocabulaire en répétition espacée. Publié sur GitHub Pages : https://nthimotte8.github.io/EnglishCoach/ |
+| **App iPhone** | [`mobile/`](mobile/) | iPhone 13 et plus récents (Expo / React Native). Coach embarqué (Qwen 2.5 1.5B), reconnaissance vocale iOS sur l'appareil. |
+
+Les deux partagent les mêmes principes :
+- **les sources** : podcast, vidéo YouTube, texte collé, texte généré sur un thème ;
+- **les 5 exercices** : lecture à voix haute, répétition sans texte, reconnaissance à l'écoute, dictée, mots manquants ;
+- **le coach**, qui pose des questions, corrige et évalue le niveau CECRL ;
+- **une progression** stockée localement.
 
 ## Démarrage rapide
 
-Prérequis : un Mac avec Xcode, Node.js 20+, l'iPhone branché en USB.
+**Site web** : ouvre https://nthimotte8.github.io/EnglishCoach/ dans Chrome, ou en local :
 
 ```bash
-cd mobile
-npm install
-npx expo install --fix
-npx expo run:ios --device
+python3 -m http.server 8000 -d web   # puis http://localhost:8000
 ```
 
-Au premier lancement, télécharge le coach (environ 1 Go) depuis l'onglet **Coach** ou **Mon compte**.
+**App iPhone** : sur un Mac avec Xcode, l'iPhone branché.
 
-> L'ancienne version web (Django + faster-whisper) reste consultable dans l'historique Git, jusqu'au commit `2fa7b2d`.
+```bash
+cd mobile && npm install && npx expo install --fix && npx expo run:ios --device
+```
+
+Les détails sont dans [`web/README.md`](web/README.md) et [`mobile/README.md`](mobile/README.md).
