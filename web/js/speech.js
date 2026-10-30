@@ -1,4 +1,6 @@
 // Voice: microphone recording, Whisper speech-to-text (in a worker), and the browser's text-to-speech.
+import { getSetting } from './db.js';
+
 const mock = () => globalThis.__EC_MOCK__;
 
 /* ---------------- Whisper ---------------- */
@@ -28,16 +30,26 @@ function asrWorker() {
   return worker;
 }
 
-function call(msg, transfer) {
+/** "rapide" or "precis": the setting, or by default "rapide" on computers with 8 GB of memory or less. */
+export async function asrModel() {
+  const s = await getSetting('asr');
+  if (s) return s;
+  return (navigator.deviceMemory ?? 8) <= 8 ? 'rapide' : 'precis';
+}
+
+async function call(msg, transfer) {
   const id = ++seq;
+  const model = await asrModel();
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    asrWorker().postMessage({ id, ...msg }, transfer ?? []);
+    asrWorker().postMessage({ id, model, ...msg }, transfer ?? []);
   });
 }
 
-/** Loads Whisper ahead of time (downloads ~150 MB the first time). */
+/** Loads Whisper ahead of time (downloaded the first time, then from the browser cache). */
 export function preloadAsr() { return mock() ? Promise.resolve() : call({ type: 'load' }); }
+/** Same, without surfacing errors: used when a voice page opens so the first analysis is quick. */
+export function warmUpAsr() { preloadAsr().catch(() => {}); }
 
 /**
  * Transcribes 16 kHz mono audio. With words=true, returns word timestamps:

@@ -74,3 +74,6 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 route();
+
+// load the coach in the background if it is already downloaded, so the first answer does not wait
+setTimeout(() => ai.warmUpIfCached(), 1500);

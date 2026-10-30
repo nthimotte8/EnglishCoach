@@ -1,6 +1,6 @@
 // The coach's language model, running in the browser on the graphics card (WebLLM + WebGPU).
 // Free, no API key, works offline once the model is in the browser cache.
-import { extractJson } from './textproc.js';
+import { extractJson, partialField } from './textproc.js';
 import { getSetting, setSetting } from './db.js';
 
 const WEBLLM = 'https://esm.run/@mlc-ai/web-llm@0.2.84';
@@ -25,7 +25,7 @@ let loadedId = null;
 let loading = null;
 let queue = Promise.resolve();
 const listeners = new Set();
-export const state = { status: 'idle', progress: 0, text: '', modelId: null, error: null };
+export const state = { status: 'idle', progress: 0, text: '', modelId: null, error: null, charsPerSec: null };
 
 function emit(patch) {
   Object.assign(state, patch);
@@ -131,19 +131,41 @@ function frenchProgress(t = '') {
 
 /**
  * Ask the model for JSON matching `schema` (enforced by a grammar inside WebLLM).
+ * The answer is streamed: with `stream: 'reply'`, onPartial(text, done) receives that string field
+ * while it is being written, so the page can show and speak it before the rest is generated.
  * Calls are queued: the model answers one request at a time.
  */
-export function json(messages, schema, { maxTokens = 500, temperature = 0.4 } = {}) {
+export function json(messages, schema, { maxTokens = 400, temperature = 0.4, stream = null, onPartial = null } = {}) {
   const run = async () => {
-    if (mock()) return mock().llm(messages, schema);
+    if (mock()) {
+      const r = await mock().llm(messages, schema);
+      if (stream && onPartial && r?.[stream]) { onPartial(r[stream].slice(0, 12), false); onPartial(r[stream], true); }
+      return r;
+    }
     await load();
     emit({ status: 'thinking' });
+    let text = '', firstAt = null, lastSent = '';
     try {
-      const res = await engine.chat.completions.create({
-        messages, temperature, top_p: 0.9, max_tokens: maxTokens,
+      const chunks = await engine.chat.completions.create({
+        messages, temperature, top_p: 0.9, max_tokens: maxTokens, stream: true,
         response_format: { type: 'json_object', schema: JSON.stringify(schema) },
       });
-      return extractJson(res.choices?.[0]?.message?.content ?? '');
+      for await (const chunk of chunks) {
+        const delta = chunk.choices?.[0]?.delta?.content ?? '';
+        if (!delta) continue;
+        if (firstAt === null) firstAt = performance.now();
+        text += delta;
+        if (stream && onPartial) {
+          const p = partialField(text, stream);
+          if (p.value !== lastSent || p.done) { onPartial(p.value, p.done); lastSent = p.value; if (p.done) onPartial = null; }
+        }
+      }
+      // writing speed, used to suggest a lighter model on slow machines
+      if (firstAt !== null && text.length > 40) {
+        const cps = text.length / Math.max(0.1, (performance.now() - firstAt) / 1000);
+        emit({ charsPerSec: Math.round(state.charsPerSec ? state.charsPerSec * 0.6 + cps * 0.4 : cps) });
+      }
+      return extractJson(text);
     } finally {
       emit({ status: 'ready' });
     }
@@ -152,5 +174,14 @@ export function json(messages, schema, { maxTokens = 500, temperature = 0.4 } = 
   queue = p.catch(() => {});
   return p;
 }
+
+/** Loads the model in the background when it is already in the browser cache (no download). */
+export async function warmUpIfCached() {
+  if (mock() || engine || loading) return;
+  try { if ((await webgpuInfo()).ok && (await isCached())) await load(); } catch { /* the gate will show the error */ }
+}
+
+/** True when answers are slow enough that a lighter model would clearly help (~ under 10 words/s). */
+export const isSlow = () => state.charsPerSec !== null && state.charsPerSec < 55;
 
 export function interrupt() { try { engine?.interruptGenerate(); } catch { /* nothing running */ } }

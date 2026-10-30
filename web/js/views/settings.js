@@ -1,12 +1,13 @@
 // Settings: coach size, model cache, speech recognition, voice, backup and reset.
 import * as ai from '../ai.js';
 import * as db from '../db.js';
-import { onAsrProgress, preloadAsr, speak } from '../speech.js';
+import { asrModel, onAsrProgress, preloadAsr, speak } from '../speech.js';
 import { $, $$, html, render, toast } from '../ui.js';
 
 export async function mount(view) {
   const tier = await ai.getTier();
   const gpu = await ai.webgpuInfo();
+  const asr = await asrModel();
   let offState = () => {};
 
   render(view, html`<div class="wrap">
@@ -16,7 +17,8 @@ export async function mount(view) {
     <section class="panel">
       <h2>Niveau du coach</h2>
       ${gpu.ok ? '' : html`<p class="notice">${gpu.reason}</p>`}
-      <p class="muted">Un modèle plus gros corrige mieux et évalue ton niveau plus finement, mais il demande plus de mémoire graphique et répond plus lentement.</p>
+      <p class="muted">Un modèle plus gros corrige mieux et évalue ton niveau plus finement, mais il demande plus de mémoire graphique et répond plus lentement. Sur un Mac M1 ou un portable avec 8 Go de mémoire, choisis « Léger ».</p>
+      ${ai.state.charsPerSec ? html`<p class="hint">Vitesse mesurée sur cet ordinateur : environ ${Math.round(ai.state.charsPerSec / 6)} mots par seconde.</p>` : ''}
       <div class="stack" style="gap:8px" role="radiogroup" aria-label="Niveau du coach">
         ${ai.TIERS.map((t) => html`<label class="tier"><input type="radio" name="tier" value="${t.key}" ${t.key === tier ? 'checked' : ''}>
           <span class="stack" style="gap:2px"><b>${t.label}</b><span class="hint">${t.hint}</span><span class="hint mono" data-model="${t.key}"></span></span></label>`)}
@@ -28,7 +30,11 @@ export async function mount(view) {
 
     <section class="panel">
       <h2>Reconnaissance vocale</h2>
-      <p class="muted">Whisper (OpenAI, open source) transcrit ta voix et les fichiers audio directement dans le navigateur. Il se télécharge (~150 Mo) à la première utilisation.</p>
+      <p class="muted">Whisper (OpenAI, open source) transcrit ta voix et les fichiers audio directement dans le navigateur. Il se télécharge à la première utilisation.</p>
+      <div class="stack" style="gap:8px" role="radiogroup" aria-label="Reconnaissance vocale">
+        <label class="tier"><input type="radio" name="asr" value="rapide" ${asr === 'rapide' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Rapide</b><span class="hint">Analyse environ deux fois plus rapide, ~40 Mo. Conseillé sur un ordinateur portable ou un Mac M1.</span></span></label>
+        <label class="tier"><input type="radio" name="asr" value="precis" ${asr === 'precis' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Précis</b><span class="hint">Reconnaît mieux les accents et les mots rares, ~150 Mo.</span></span></label>
+      </div>
       <div class="row"><button class="btn" type="button" id="asr">Télécharger maintenant</button><span class="hint" id="asr-state"></span></div>
     </section>
 
@@ -83,6 +89,7 @@ export async function mount(view) {
     try { await preloadAsr(); $('#asr-state', view).textContent = 'Prêt.'; } catch (err) { $('#asr-state', view).textContent = err.message; b.disabled = false; }
     off();
   });
+  for (const r of $$('input[name="asr"]', view)) r.addEventListener('change', () => db.setSetting('asr', r.value));
   $('#voice', view).addEventListener('click', () => speak('Hi! I am your English coach. Shall we practise together today?'));
 
   $('#export', view).addEventListener('click', async () => {

@@ -6,9 +6,11 @@ const S = (properties, required = Object.keys(properties)) => ({ type: 'object',
 const str = { type: 'string' };
 const level = { type: 'string', enum: LEVELS };
 const list = (items, max) => ({ type: 'array', items, maxItems: max });
-const corrections = list(S({ original: str, better: str, why: str }), 4);
+const corrections = list(S({ original: str, better: str, why: str }), 3);
+// "reply" comes first so it can be shown and spoken while the corrections are still being written
+const turnSchema = S({ reply: str, corrections, tip: str });
 
-export function excerpt(material, maxChars = 3500) {
+export function excerpt(material, maxChars = 2000) {
   let out = '';
   for (const l of material.lines) {
     if (out.length + l.text.length > maxChars) break;
@@ -18,7 +20,7 @@ export function excerpt(material, maxChars = 3500) {
 }
 
 const same = (a, b) => String(a).toLowerCase().replace(/[^a-z' ]/g, '').trim() === String(b).toLowerCase().replace(/[^a-z' ]/g, '').trim();
-const cleanCorrections = (cs) => (cs ?? []).filter((c) => c.original && c.better && !same(c.original, c.better)).slice(0, 4);
+const cleanCorrections = (cs) => (cs ?? []).filter((c) => c.original && c.better && !same(c.original, c.better)).slice(0, 3);
 
 /* ---------------- content ---------------- */
 export async function generateText(topic, lvl) {
@@ -43,22 +45,20 @@ export async function estimateLevel(material) {
 
 /* ---------------- discussion about a content ---------------- */
 function contentSystem(material) {
-  return 'You are English Coach, a friendly but demanding English speaking coach for an adult French-speaking learner ' +
-    'who wants to become fluent in professional and everyday conversation.\n' +
-    `The learner has just studied this content, titled "${material.title}" (level ${material.level ?? 'unknown'}):\n"""\n${excerpt(material)}\n"""\n` +
-    'Rules:\n' +
-    '1. Ask ONE open question at a time about the content: its ideas, the speaker\'s examples, then the learner\'s opinion and experience. Start easy, then go deeper. Under 50 words, natural English adapted to the learner.\n' +
-    '2. Check the learner\'s last message for grammar, vocabulary, word choice and unnatural phrasing. List up to 4 real mistakes, most useful first: "original" (their exact words), "better" (natural English), "why" (short explanation in French). No mistake: empty list. Ignore capitals and punctuation (messages may come from speech recognition).\n' +
-    '3. "tip": one short sentence in French, e.g. a more idiomatic expression to reuse.\n' +
-    '4. "reply": your next message to the learner, in English.';
+  return 'You are English Coach, a friendly, demanding speaking coach for a French adult learner.\n' +
+    `The learner just studied "${material.title}" (level ${material.level ?? 'unknown'}):\n"""\n${excerpt(material)}\n"""\n` +
+    'Answer in JSON, in this order:\n' +
+    '- "reply": your next message in English: ONE open question about the content, then about the learner\'s opinion and experience. Under 40 words.\n' +
+    '- "corrections": up to 3 real mistakes in the learner\'s last message (grammar, word choice, unnatural phrasing): "original" (their words), "better" (natural English), "why" (short, in French). Empty if none. Ignore capitals and punctuation.\n' +
+    '- "tip": one short sentence in French with an expression to reuse.';
 }
 
-export async function contentTurn(material, history, message) {
+export async function contentTurn(material, history, message, onReply) {
   const r = await json([
     { role: 'system', content: contentSystem(material) },
-    ...history.slice(-12),
-    { role: 'user', content: message ? `Learner: ${message}` : 'Start the conversation with your first question. Corrections must be empty.' },
-  ], S({ corrections, tip: str, reply: str }), { maxTokens: 450, temperature: 0.5 });
+    ...history.slice(-8),
+    { role: 'user', content: message ? `Learner: ${message}` : 'Start with your first question. Corrections must be empty.' },
+  ], turnSchema, { maxTokens: 320, temperature: 0.5, stream: 'reply', onPartial: onReply });
   return { corrections: message ? cleanCorrections(r.corrections) : [], tip: r.tip ?? '', reply: (r.reply || 'Can you tell me more?').trim() };
 }
 
@@ -80,20 +80,20 @@ export const SCENARIOS = [
 ];
 
 function roleplaySystem(sc, custom, lvl) {
-  const role = sc.key === 'custom' ? `a character in this situation described by the learner (in French or English): "${custom}"` : sc.role;
-  return `You are playing ${role}. The learner is a French speaker practising spoken English${lvl ? ` (current level ${lvl})` : ''}.\n` +
-    'Stay in character and keep the scene realistic and lively. Speak naturally, like in a real spoken conversation: 1 to 3 short sentences, under 45 words, and usually end with a question or a prompt so the learner keeps talking. Adapt your English to the learner\'s level.\n' +
-    'Out of character, check the learner\'s last message: up to 4 real mistakes ("original" their words, "better" natural spoken English, "why" short explanation in French), empty list if none. Ignore punctuation and capitals: messages come from speech recognition.\n' +
-    '"tip": one short sentence in French with a useful phrase for this situation.\n' +
-    '"reply": your next line, in character, in English.';
+  const role = sc.key === 'custom' ? `a character in this situation described by the learner: "${custom}"` : sc.role;
+  return `You are playing ${role}. The learner is a French speaker practising spoken English${lvl ? ` (level ${lvl})` : ''}.\n` +
+    'Answer in JSON, in this order:\n' +
+    '- "reply": your next line, in character: 1 to 3 short spoken sentences, under 40 words, usually ending with a question. Keep the scene realistic.\n' +
+    '- "corrections": out of character, up to 3 real mistakes in the learner\'s last message: "original", "better" (natural spoken English), "why" (short, in French). Empty if none. Ignore punctuation: messages come from speech recognition.\n' +
+    '- "tip": one short sentence in French with a useful phrase for this situation.';
 }
 
-export async function roleplayTurn(sc, custom, lvl, history, message) {
+export async function roleplayTurn(sc, custom, lvl, history, message, onReply) {
   const r = await json([
     { role: 'system', content: roleplaySystem(sc, custom, lvl) },
-    ...history.slice(-14),
+    ...history.slice(-10),
     { role: 'user', content: message ? `Learner: ${message}` : `${sc.opening} Corrections must be empty.` },
-  ], S({ corrections, tip: str, reply: str }), { maxTokens: 400, temperature: 0.7 });
+  ], turnSchema, { maxTokens: 300, temperature: 0.7, stream: 'reply', onPartial: onReply });
   return { corrections: message ? cleanCorrections(r.corrections) : [], tip: r.tip ?? '', reply: (r.reply || 'Sorry, could you say that again?').trim() };
 }
 

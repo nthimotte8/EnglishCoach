@@ -10,6 +10,14 @@ const MOCK = () => {
   const keys = (s) => Object.keys(s.properties ?? {});
   globalThis.__EC_MOCK__ = {
     cached: true,
+    podcasts: {
+      async search(term) {
+        return [{ id: 1, title: term.includes('6 Minute') ? '6 Minute English' : 'Data Talks', author: 'BBC', artwork: null, genre: 'Education', feedUrl: null, count: 2 }];
+      },
+      async episodes() {
+        return [{ title: 'Is AI changing work?', audioUrl: 'https://podcasts.example.invalid/ep1.mp3', duration: 370, published: '2026-10-20', description: 'Neil and Beth talk about AI.' }];
+      },
+    },
     async llm(messages, schema) {
       await new Promise((r) => setTimeout(r, 120));
       const k = keys(schema);
@@ -142,6 +150,22 @@ await step('youtube + pasted transcript form validates', async () => {
   await page.locator('#text').fill('0:01\nHello and welcome to the channel.\n0:04\nToday we talk about habits.\n0:08\nLet us get started now.');
   await page.getByRole('button', { name: 'Charger' }).click();
   await page.locator('.tline').nth(2).waitFor();
+});
+await step('podcast suggestions, search and episode fallback', async () => {
+  await page.goto(BASE + '#nouveau');
+  await page.getByText('Suggestions pour ton niveau (B2)').waitFor();
+  await page.getByRole('button', { name: 'Tech et data' }).click();
+  await page.locator('[data-sug]').first().waitFor();
+  await page.getByRole('button', { name: 'Tous' }).click();
+  await page.locator('[data-sug]').filter({ hasText: '6 Minute English' }).click();
+  await page.getByRole('heading', { name: '6 Minute English' }).waitFor();
+  await page.locator('#q').fill('data');
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
+  await page.locator('[data-show]').first().click();
+  await page.getByRole('heading', { name: 'Data Talks' }).waitFor();
+  await page.locator('[data-ep]').first().click();
+  await page.getByRole('link', { name: 'Télécharger l’épisode' }).waitFor({ timeout: 15000 });
+  await shot('12-podcasts');
 });
 await step('progress dashboard', async () => {
   await page.goto(BASE + '#progression');

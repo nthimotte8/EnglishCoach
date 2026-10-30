@@ -1,7 +1,7 @@
 // Chat with the coach, by text or by voice. Shared by the content discussion and the free conversation.
 import * as ai from '../ai.js';
 import * as repo from '../repo.js';
-import { Recorder, speak, stopSpeaking, transcribe } from '../speech.js';
+import { Recorder, speak, stopSpeaking, transcribe, warmUpAsr } from '../speech.js';
 import { analyseSpeech } from '../textproc.js';
 import { $, evaluationHtml, feedbackHtml, html, icon, markup, minutesSince, render, toast } from '../ui.js';
 
@@ -47,8 +47,7 @@ export function mountChat(root, opts) {
     $('#wait-t', root).textContent = label || '';
     for (const b of root.querySelectorAll('#form button, #mic-big, #end')) b.disabled = !!label && b.id !== 'halt';
   };
-  const themBubble = (text) => html`<div class="msg them"><span class="who">${opts.them}</span>${text}
-    <div><button class="btn quiet small" type="button" data-speak="${text}">${icon.speaker}Écouter</button></div></div>`;
+  // (reply bubbles are built live in ask())
 
   chat.addEventListener('click', (e) => {
     const b = e.target.closest('[data-speak]');
@@ -58,11 +57,31 @@ export function mountChat(root, opts) {
   async function ask(message, spoken) {
     busy(message ? 'Le coach réfléchit…' : 'Le coach prépare sa première question…');
     ctlStop = false;
-    try {
-      const r = message ? await opts.turn(st.history, message) : await opts.first();
+    // the corrections slot sits between the learner's message and the reply, filled when they arrive
+    if (message) add(html`<div class="fb pending" data-fb><span class="thinking"><span class="dot"></span>Corrections en cours…</span></div>`);
+    const slot = message ? [...chat.querySelectorAll('[data-fb]')].pop() : null;
+    let live = null, spoke = false;
+    // the reply is shown while it is written, and spoken as soon as it is complete
+    const onReply = (text, done) => {
       if (ctlStop) return;
+      if (!live && text) {
+        add(html`<div class="msg them" data-live><span class="who">${opts.them}</span><span data-text></span></div>`);
+        live = [...chat.querySelectorAll('[data-live]')].pop();
+        busy(message ? 'Le coach vérifie ta phrase…' : 'Le coach termine sa réponse…');
+      }
+      if (live) live.querySelector('[data-text]').textContent = text;
+      if (done && !spoke && text) { spoke = true; if (st.autoSpeak) speak(text); }
+    };
+    try {
+      const r = message ? await opts.turn(st.history, message, onReply) : await opts.first(onReply);
+      if (ctlStop) { slot?.remove(); return; }
+      if (!live) onReply(r.reply, true);
+      live.querySelector('[data-text]').textContent = r.reply;
+      live.removeAttribute('data-live');
+      live.insertAdjacentHTML('beforeend', markup(html`<div><button class="btn quiet small" type="button" data-speak="${r.reply}">${icon.speaker}Écouter</button></div>`));
+      if (!spoke) { spoke = true; if (st.autoSpeak) speak(r.reply); }
       if (message) {
-        add(feedbackHtml(r));
+        slot.outerHTML = markup(feedbackHtml(r));
         if (r.corrections.length) {
           const n = await repo.addCorrections(r.corrections, opts.title);
           if (n) import('../main.js').then((m) => m.refreshBadge());
@@ -70,15 +89,32 @@ export function mountChat(root, opts) {
         st.history.push({ role: 'user', content: 'Learner: ' + message });
       }
       st.history.push({ role: 'assistant', content: r.reply });
-      add(themBubble(r.reply));
-      if (st.autoSpeak) speak(r.reply);
+      maybeSuggestLighter();
     } catch (e) {
+      slot?.remove(); live?.remove();
       add(html`<p class="notice">${e.message || 'Le coach n’a pas pu répondre.'}</p>`);
       if (message) { st.learner.pop(); if (spoken) st.speech.pop(); }
     } finally {
       busy(null);
       $('#end', root).hidden = st.learner.length < 2 || st.done;
     }
+  }
+
+  // once per conversation: on a slow computer, offer the lighter model
+  let suggested = false;
+  async function maybeSuggestLighter() {
+    if (suggested || !ai.isSlow() || (await ai.getTier()) === 'leger') return;
+    suggested = true;
+    const wps = Math.round(ai.state.charsPerSec / 6);
+    add(html`<div class="notice row between" data-lighter><span>Ton ordinateur écrit environ ${wps} mots par seconde. Le coach « Léger » répond à peu près deux fois plus vite, avec des corrections un peu moins fines.</span>
+      <button class="btn small" type="button">Passer en Léger</button></div>`);
+    const box = [...chat.querySelectorAll('[data-lighter]')].pop();
+    box.querySelector('button').addEventListener('click', async () => {
+      box.innerHTML = markup(html`<span class="thinking"><span class="dot"></span>Chargement du coach Léger…</span>`);
+      await ai.setTier('leger');
+      try { await ai.load(); box.textContent = 'Coach Léger chargé : les prochaines réponses seront plus rapides.'; }
+      catch (err) { box.textContent = err.message; }
+    });
   }
 
   function send(text, spoken) {
@@ -144,6 +180,7 @@ export function mountChat(root, opts) {
     } finally { busy(null); if (st.done) $('#end', root).hidden = true; }
   });
 
+  if (opts.voiceFirst) warmUpAsr();
   ask(null);
   return () => { rec.cancel(); stopSpeaking(); ctlStop = true; };
 }
