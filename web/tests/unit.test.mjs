@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { suggest, toEpisode, toShow } from '../js/podcasts.js';
 import { cardKey, dueCards, isMastered, newCard, review } from '../js/srs.js';
+import { rankByLevel, TEXTS, TEXT_SITES, TOPIC_IDEAS, YOUTUBE, youtubeSearchUrl } from '../js/suggestions.js';
 import {
   align, analyseSpeech, buildExercise, exerciseUnits, extractJson, linesFromSentences, linesFromTimedWords, parseFeed,
   parseTranscript, partialField, youtubeId,
@@ -149,4 +150,20 @@ test('directory results are normalised', () => {
     { title: 'Ep 1', audioUrl: 'https://x/ep.mp3', duration: 361, published: '2026-10-01', description: 'Hi there' });
   assert.equal(toEpisode({ trackName: 'Video', episodeUrl: 'v.mp4', episodeContentType: 'video' }), null);
   assert.equal(toEpisode({ trackName: 'No audio' }), null);
+});
+
+test('suggestions for every source are well formed and level-ranked', () => {
+  for (const list of [YOUTUBE, TEXT_SITES, TEXTS, TOPIC_IDEAS]) {
+    for (const it of list) assert.ok(it.levels.length && it.levels.every((l) => ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(l)));
+  }
+  for (const t of TEXTS) {
+    const lines = parseTranscript(t.text);
+    assert.ok(lines.length >= 5, t.title);
+    assert.ok(exerciseUnits(lines).length >= 5, t.title);
+  }
+  const a2 = rankByLevel(TEXTS, 'A2');
+  assert.equal(a2[0].title, 'My morning routine');
+  assert.equal(rankByLevel(TEXTS, 'C1')[0].levels.includes('C1'), true);
+  assert.ok(rankByLevel(YOUTUBE, 'B2', 'tech').every((x) => x.theme === 'tech'));
+  assert.ok(youtubeSearchUrl('data & AI').includes('search_query=data%20%26%20AI'));
 });

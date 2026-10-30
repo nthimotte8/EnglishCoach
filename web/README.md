@@ -11,6 +11,11 @@ Le site web reprend les principes de l'app iPhone : tout tourne **dans le naviga
 
 Il y a aussi :
 - la **recherche de podcasts** dans l'annuaire Apple Podcasts, plus 17 suggestions classées par niveau CECRL et par thème (apprendre l'anglais, business, tech et data, actualité, science, culture) ;
+- des **suggestions pour chaque source**, adaptées à ton niveau :
+  - **YouTube** : 14 chaînes et recherches, qui ouvrent YouTube filtré sur les vidéos sous-titrées ;
+  - **Texte** : 6 textes prêts à pratiquer en un clic, de A2 à C1, et 8 sites de textes gradués ;
+  - **Thème** : des idées de sujets ;
+  - **Fichier** : des idées de fichiers à importer ;
 - une source **Fichier audio / vidéo** (n'importe quel MP3, M4A, MP4… transcrit par Whisper) ;
 - une **série de jours** consécutifs dans la progression ;
 - l'**export et l'import** de toutes tes données ;
