@@ -167,6 +167,22 @@ await step('podcast suggestions, search and episode fallback', async () => {
   await page.getByRole('link', { name: 'Télécharger l’épisode' }).waitFor({ timeout: 15000 });
   await shot('12-podcasts');
 });
+await step('suggestions on the YouTube, text, file and theme tabs', async () => {
+  await page.goto(BASE + '#nouveau');
+  await page.getByRole('button', { name: 'YouTube' }).click();
+  await page.getByText('Chaînes suggérées pour ton niveau (B2)').waitFor();
+  await page.getByRole('link', { name: /Seattle Data Guy/ }).waitFor();
+  await page.getByRole('button', { name: 'Fichier audio / vidéo' }).click();
+  await page.getByText('Idées de fichiers à importer').waitFor();
+  await page.getByRole('button', { name: 'Thème' }).click();
+  await page.locator('[data-idea]').first().click();
+  if (!(await page.locator('#own').inputValue())) throw new Error('idea not copied');
+  await page.getByRole('button', { name: 'Texte', exact: true }).click();
+  await page.getByText('Où trouver des textes').waitFor();
+  await shot('13-text-suggestions');
+  await page.locator('[data-pick]').filter({ hasText: 'What a data engineer actually does' }).click();
+  await page.getByRole('heading', { name: 'What a data engineer actually does' }).waitFor();
+});
 await step('progress dashboard', async () => {
   await page.goto(BASE + '#progression');
   await page.locator('svg.chart').waitFor();

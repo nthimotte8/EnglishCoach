@@ -1,6 +1,7 @@
 // Podcast search and suggestions, through the public Apple Podcasts directory (iTunes Search API).
 // Calls go through script tags (the API's "callback" mode), which works from any website without a server.
-import { LEVELS, parseFeed } from './textproc.js';
+import { rankByLevel } from './suggestions.js';
+import { parseFeed } from './textproc.js';
 
 const mock = () => globalThis.__EC_MOCK__?.podcasts;
 
@@ -30,14 +31,8 @@ export const THEMES = [
   ['actualite', 'Actualité'], ['science', 'Science'], ['culture', 'Culture et société'],
 ];
 
-/** Suggestions for a theme, closest to the learner's level first (level ± 1 shown, others after). */
-export function suggest(level, theme = 'tous') {
-  const li = LEVELS.indexOf(level);
-  const dist = (s) => (li < 0 ? 0 : Math.min(...s.levels.map((l) => Math.abs(LEVELS.indexOf(l) - li))));
-  return SUGGESTIONS.filter((s) => theme === 'tous' || s.theme === theme)
-    .map((s, i) => ({ ...s, fit: dist(s) <= 1, rank: dist(s) * 100 + i }))
-    .sort((a, b) => a.rank - b.rank);
-}
+/** Suggestions for a theme, closest to the learner's level first. */
+export const suggest = (level, theme = 'tous') => rankByLevel(SUGGESTIONS, level, theme);
 
 let n = 0;
 function jsonp(url, timeoutMs = 12000) {

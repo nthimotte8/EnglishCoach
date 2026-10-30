@@ -3,6 +3,7 @@ import * as coach from '../coach.js';
 import * as repo from '../repo.js';
 import { getSetting } from '../db.js';
 import { episodes, searchShows, suggest, THEMES } from '../podcasts.js';
+import { FILE_TIPS, rankByLevel, TEXT_SITES, TEXTS, TOPIC_IDEAS, YOUTUBE, youtubeSearchUrl } from '../suggestions.js';
 import { decode, onAsrProgress, transcribe } from '../speech.js';
 import { LEVELS, linesFromSentences, linesFromTimedWords, parseFeed, parseTranscript, youtubeId } from '../textproc.js';
 import { $, $$, html, icon, render, toast } from '../ui.js';
@@ -14,6 +15,7 @@ const MODES = [['podcast', 'Podcast'], ['fichier', 'Fichier audio / vidéo'], ['
 
 export async function mount(view) {
   let mode = 'podcast';
+  const userLevel = await getSetting('level');
   let gateCleanup = () => {};
   render(view, html`<div class="wrap">
     <div class="page-head"><div class="stack" style="gap:4px"><h1>Nouveau contenu</h1>
@@ -52,9 +54,29 @@ export async function mount(view) {
     } finally { clearInterval(tick); off(); }
   }
 
+
+  /** A suggestions panel with theme filters, ranked by the learner's level. */
+  function suggestionsPanel(el, { title, hint, items, themes, card, onPick }) {
+    let theme = 'tous';
+    const avail = themes.filter(([k]) => k === 'tous' || items.some((i) => i.theme === k));
+    render(el, html`<section class="panel">
+      <div class="row between"><h2>${title}${userLevel ? ` pour ton niveau (${userLevel})` : ''}</h2><span class="hint">${hint}</span></div>
+      ${avail.length > 2 ? html`<div class="row tight" role="group" aria-label="Thème">${avail.map(([k, l]) => html`<button class="pick" type="button" data-th="${k}" aria-pressed="${k === theme}">${l}</button>`)}</div>` : ''}
+      <div class="grid3" data-grid></div></section>`);
+    const paint = () => {
+      const list = rankByLevel(items, userLevel, theme);
+      render($('[data-grid]', el), html`${list.map((it, i) => card(it, i))}`);
+      for (const b of $$('[data-pick]', el)) b.addEventListener('click', (e) => onPick(list[Number(b.dataset.pick)], e));
+    };
+    for (const b of $$('[data-th]', el)) b.addEventListener('click', () => { theme = b.dataset.th; $$('[data-th]', el).forEach((x) => x.setAttribute('aria-pressed', x === b)); paint(); });
+    paint();
+  }
+  const levelTag = (it) => `${it.levels.length > 1 ? `${it.levels[0]}–${it.levels[it.levels.length - 1]}` : it.levels[0]}${userLevel && !it.fit ? ' · hors niveau' : ''}`;
+  const TEXT_THEMES = [...THEMES, ['quotidien', 'Vie quotidienne']];
+
   const panes = {
     async podcast() {
-      const level = await getSetting('level');
+      const level = userLevel;
       let theme = 'tous';
       render(pane, html`<section class="panel">
           <form class="row" id="search" role="search" style="align-items:flex-end">
@@ -176,6 +198,10 @@ export async function mount(view) {
           <span class="btn small">Choisir un fichier</span>
         </label>
         <label class="field">Titre (facultatif)<input id="ftitle" type="text" placeholder="Ex. Épisode sur le télétravail"></label>
+      </section>
+      <section class="panel"><h2>Idées de fichiers à importer</h2>
+        <div class="grid2">${FILE_TIPS.map((t) => html`<div class="stack" style="gap:2px"><b>${t.title}</b><span class="hint">${t.why}</span></div>`)}</div>
+        <p class="hint">Pas de fichier sous la main ? Utilise l’onglet Podcast : la recherche trouve des épisodes à transcrire directement.</p>
       </section>`);
       const go = async (file) => {
         if (!file) return;
@@ -193,20 +219,61 @@ export async function mount(view) {
       drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); go(e.dataTransfer.files[0]); });
     },
 
-    youtube() { textForm(true); },
-    texte() { textForm(false); },
+    youtube() {
+      textForm(true);
+      pane.insertAdjacentHTML('beforeend', '<div id="yt-search"></div><div id="yt-sugg"></div>');
+      render($('#yt-search', pane), html`<form class="panel" id="yts" role="search">
+        <h2>Trouver une vidéo</h2>
+        <p class="hint">Ouvre YouTube dans un nouvel onglet, filtré sur les vidéos sous-titrées (nécessaire pour copier la transcription). Copie ensuite le lien et la transcription ici.</p>
+        <div class="row" style="align-items:flex-end"><label class="field" style="flex:1 1 300px">Rechercher sur YouTube<input id="ytq" type="search" placeholder="Ex. data engineering explained, job interview tips…"></label>
+          <button class="btn" type="submit">${icon.external}Rechercher sur YouTube</button></div></form>`);
+      $('#yts', pane).addEventListener('submit', (e) => {
+        e.preventDefault();
+        const q = $('#ytq', pane).value.trim();
+        if (q) window.open(youtubeSearchUrl(q), '_blank', 'noopener');
+      });
+      suggestionsPanel($('#yt-sugg', pane), {
+        title: 'Chaînes suggérées', hint: 'Ouvre les vidéos sous-titrées dans YouTube',
+        items: YOUTUBE, themes: THEMES,
+        card: (it, i) => html`<a class="ex-card" style="text-decoration:none" href="${youtubeSearchUrl(it.q)}" target="_blank" rel="noopener" data-pick="${i}">
+          <span class="skill">${levelTag(it)}</span><b>${it.name}</b><span>${it.why}</span></a>`,
+        onPick: () => {},
+      });
+    },
+
+    texte() {
+      textForm(false);
+      pane.insertAdjacentHTML('beforeend', '<div id="ready"></div><div id="sites"></div>');
+      suggestionsPanel($('#ready', pane), {
+        title: 'Textes prêts à pratiquer', hint: 'Un clic, et tu t’entraînes tout de suite',
+        items: TEXTS, themes: TEXT_THEMES,
+        card: (it, i) => html`<button class="ex-card" type="button" data-pick="${i}">
+          <span class="skill">${levelTag(it)} · ${it.text.split(/\s+/).length} mots</span><b>${it.title}</b><span>${it.text.slice(0, 110)}…</span></button>`,
+        onPick: (it) => ok({ title: it.title, source: 'text', level: it.levels[it.levels.length - 1], lines: parseTranscript(it.text) }),
+      });
+      suggestionsPanel($('#sites', pane), {
+        title: 'Où trouver des textes', hint: 'Sites gratuits, à copier-coller ici',
+        items: TEXT_SITES, themes: THEMES,
+        card: (it, i) => html`<a class="ex-card" style="text-decoration:none" href="${it.url}" target="_blank" rel="noopener" data-pick="${i}">
+          <span class="skill">${levelTag(it)}</span><b>${it.name}</b><span>${it.why}</span></a>`,
+        onPick: () => {},
+      });
+    },
 
     theme() {
       render(pane, html`<div id="gate"></div>`);
       gateCleanup = coachGate($('#gate', pane), () => {
-        let topic = TOPICS[0], level = 'B1';
+        let topic = TOPICS[0], level = LEVELS.slice(1, 5).includes(userLevel) ? userLevel : 'B1';
         render(pane, html`<section class="panel">
           <p class="muted">Le coach écrit un monologue parlé sur ce thème, à ton niveau. Il est ensuite lu par la voix de ton ordinateur.</p>
           <div class="row tight">${TOPICS.map((t) => html`<button class="pick" type="button" data-topic="${t}" aria-pressed="${t === topic}">${t}</button>`)}</div>
-          <label class="field" style="max-width:420px">Ou ton propre thème<input id="own" type="text" placeholder="Ex. Migrer un data lake vers Databricks"></label>
+          <label class="field" style="max-width:520px">Ou ton propre thème<input id="own" type="text" placeholder="Ex. Migrer un data lake vers Databricks"></label>
+          <div class="stack" style="gap:6px"><span class="label">Idées${userLevel ? ` pour ton niveau (${userLevel})` : ''}</span>
+            <div class="row tight">${rankByLevel(TOPIC_IDEAS.map((x) => ({ ...x, theme: 'tous' })), userLevel).slice(0, 8).map((x) => html`<button class="pick" type="button" data-idea="${x.t}">${x.t}</button>`)}</div></div>
           <div class="seg" role="group" aria-label="Niveau">${LEVELS.slice(1, 5).map((l) => html`<button type="button" data-level="${l}" aria-pressed="${l === level}">${l}</button>`)}</div>
           <div class="row"><button class="btn primary" type="button" id="gen">Générer le texte</button></div></section>`);
         for (const b of $$('[data-topic]', pane)) b.addEventListener('click', () => { topic = b.dataset.topic; $$('[data-topic]', pane).forEach((x) => x.setAttribute('aria-pressed', x === b)); });
+        for (const b of $$('[data-idea]', pane)) b.addEventListener('click', () => { $('#own', pane).value = b.dataset.idea; $('#own', pane).focus(); });
         for (const b of $$('[data-level]', pane)) b.addEventListener('click', () => { level = b.dataset.level; $$('[data-level]', pane).forEach((x) => x.setAttribute('aria-pressed', x === b)); });
         $('#gen', pane).addEventListener('click', async () => {
           clearErr();
