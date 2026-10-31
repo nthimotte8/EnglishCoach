@@ -31,6 +31,7 @@ export function coachGate(el, onReady, { compact = false } = {}) {
       <h2>${compact ? 'Charger le coach' : 'Le coach tourne sur ton ordinateur'}</h2>
       ${compact ? '' : html`<p class="muted">C’est un modèle d’IA qui s’exécute dans ton navigateur, sur ta carte graphique : gratuit, sans compte, et tes réponses ne quittent pas ton ordinateur.</p>`}
       ${gpu.ok ? html`
+        ${tierKey !== 'leger' ? html`<p class="notice">Le niveau « ${tier?.label} » demande beaucoup de mémoire : sur un ordinateur à 8 Go (Mac M1, beaucoup de portables), il peut figer la machine. Passe en « Léger » dans <a href="#reglages">Réglages</a> en cas de doute.</p>` : ''}
         <p class="hint">Niveau du coach : <b>${tier?.label}</b> (${tier?.hint}). ${cached ? 'Déjà téléchargé : chargement en quelques secondes.' : 'Premier chargement : téléchargement unique, de préférence en Wi-Fi.'} <a href="#reglages">Changer</a></p>
         <div class="row"><button class="btn primary" type="button" data-load>${cached ? 'Charger le coach' : 'Télécharger et charger le coach'}</button></div>`
       : html`<p class="notice">${gpu.reason}</p>`}

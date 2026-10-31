@@ -8,12 +8,12 @@ const WEBLLM = 'https://esm.run/@mlc-ai/web-llm@0.2.84';
 // Candidates per tier, in order of preference. The first one that exists in WebLLM's catalogue
 // and that the graphics card can run (f16 shaders or not) is used.
 export const TIERS = [
-  { key: 'leger', label: 'Léger', hint: 'Tout ordinateur récent, ~1 Go', candidates: [
+  { key: 'leger', label: 'Léger', hint: 'Conseillé avec 8 Go de mémoire (Mac M1, portables), ~1 Go', candidates: [
     'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC'] },
-  { key: 'equilibre', label: 'Équilibré', hint: 'Recommandé, ~2,5 Go', candidates: [
+  { key: 'equilibre', label: 'Équilibré', hint: '16 Go de mémoire conseillés, ~2,5 Go. Peut figer un ordinateur à 8 Go', candidates: [
     'Qwen2.5-3B-Instruct-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
     'Qwen2.5-3B-Instruct-q4f32_1-MLC', 'Llama-3.2-3B-Instruct-q4f32_1-MLC'] },
-  { key: 'precis', label: 'Précis', hint: 'Carte graphique avec 6 Go ou plus, ~5 Go', candidates: [
+  { key: 'precis', label: 'Précis', hint: 'Ordinateur puissant (carte graphique dédiée ou 32 Go), ~5 Go', candidates: [
     'Qwen2.5-7B-Instruct-q4f16_1-MLC', 'Llama-3.1-8B-Instruct-q4f16_1-MLC',
     'Qwen2.5-7B-Instruct-q4f32_1-MLC', 'Llama-3.1-8B-Instruct-q4f32_1-MLC'] },
 ];
@@ -68,10 +68,36 @@ export async function resolveTier(key) {
   return { id: m.model_id, vramMB: Math.round(m.vram_required_MB ?? 0) };
 }
 
-export const getTier = () => getSetting('tier', 'equilibre');
+/** Default: the light model. A bigger one on an 8 GB computer can saturate memory and freeze the whole machine. */
+export const getTier = () => getSetting('tier', 'leger');
+
+// keeps answers fast and memory low: instructions + short history + answer fit comfortably in 2048 tokens
+const CHAT_OPTS = { context_window_size: 2048 };
+// the model is removed from the graphics card after this much inactivity, to give the memory back
+const IDLE_UNLOAD_MS = 8 * 60 * 1000;
+let worker = null;
+let idleTimer = null;
+
+async function unloadEngine() {
+  const e = engine, w = worker;
+  engine = null; worker = null; loadedId = null;
+  clearTimeout(idleTimer);
+  await e?.unload().catch(() => {});
+  w?.terminate();
+}
+function armIdleUnload() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    if (state.status !== 'ready') return armIdleUnload();
+    await unloadEngine();
+    emit({ status: 'idle', modelId: null });
+  }, IDLE_UNLOAD_MS);
+}
+/** Frees the graphics card now (e.g. when leaving the coach pages for a long time). */
+export async function unload() { await unloadEngine(); emit({ status: 'idle', modelId: null }); }
 export async function setTier(key) {
   await setSetting('tier', key);
-  if (engine) { await engine.unload().catch(() => {}); engine = null; loadedId = null; emit({ status: 'idle', modelId: null }); }
+  if (engine) { await unloadEngine(); emit({ status: 'idle', modelId: null }); }
 }
 
 /** True when the model files are already in the browser cache (no download needed). */
@@ -87,7 +113,7 @@ export async function isCached(key) {
 export async function deleteCached(key) {
   const { id } = await resolveTier(key);
   const l = await lib();
-  if (loadedId === id) { await engine?.unload().catch(() => {}); engine = null; loadedId = null; emit({ status: 'idle', modelId: null }); }
+  if (loadedId === id) { await unloadEngine(); emit({ status: 'idle', modelId: null }); }
   await l.deleteModelAllInfoInCache?.(id);
 }
 
@@ -102,14 +128,15 @@ export async function load() {
       if (!gpu.ok) throw new Error(gpu.reason);
       emit({ status: 'loading', progress: 0, text: 'Préparation du coach…', error: null });
       const l = await lib();
-      if (engine) await engine.unload().catch(() => {});
-      engine = await l.CreateWebWorkerMLCEngine(
-        new Worker(new URL('./llm-worker.js', import.meta.url), { type: 'module' }), id,
-        { initProgressCallback: (r) => emit({ progress: r.progress ?? 0, text: frenchProgress(r.text) }) });
+      if (engine) await unloadEngine();
+      worker = new Worker(new URL('./llm-worker.js', import.meta.url), { type: 'module' });
+      engine = await l.CreateWebWorkerMLCEngine(worker, id,
+        { initProgressCallback: (r) => emit({ progress: r.progress ?? 0, text: frenchProgress(r.text) }) }, CHAT_OPTS);
       loadedId = id;
+      armIdleUnload();
       emit({ status: 'ready', progress: 1, modelId: id, text: '' });
     })().catch((e) => {
-      engine = null; loadedId = null;
+      unloadEngine();
       const message = /memory|OOM|allocate/i.test(String(e?.message)) ?
         'Pas assez de mémoire graphique pour ce modèle. Choisis un niveau plus léger dans Réglages.' :
         (e?.message || 'Impossible de charger le coach.');
@@ -168,17 +195,12 @@ export function json(messages, schema, { maxTokens = 400, temperature = 0.4, str
       return extractJson(text);
     } finally {
       emit({ status: 'ready' });
+      armIdleUnload();
     }
   };
   const p = queue.then(run, run);
   queue = p.catch(() => {});
   return p;
-}
-
-/** Loads the model in the background when it is already in the browser cache (no download). */
-export async function warmUpIfCached() {
-  if (mock() || engine || loading) return;
-  try { if ((await webgpuInfo()).ok && (await isCached())) await load(); } catch { /* the gate will show the error */ }
 }
 
 /** True when answers are slow enough that a lighter model would clearly help (~ under 10 words/s). */

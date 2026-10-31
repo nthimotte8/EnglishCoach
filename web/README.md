@@ -46,6 +46,10 @@ Le code est en JavaScript moderne, sans étape de build : les fichiers de `web/`
 
 Au premier usage du coach, le modèle se télécharge (environ 2,5 Go pour « Équilibré »), une seule fois. Whisper pèse environ 150 Mo. Les deux restent ensuite dans le cache du navigateur.
 
+## Ordinateurs avec 8 Go de mémoire (Mac M1, portables)
+
+Par défaut, le coach utilise le niveau « Léger » : un modèle plus gros peut saturer la mémoire et figer tout l'ordinateur. Le coach occupe la carte graphique avec une fenêtre de contexte limitée (2 048 tokens), et il en est retiré après 8 minutes d'inactivité. La reconnaissance vocale « Rapide » tourne sur le processeur pour ne pas concurrencer le coach sur la carte graphique.
+
 ## Vitesse sur les ordinateurs modestes
 
 Sur un Mac M1 ou un portable avec 8 Go de mémoire :
