@@ -1,0 +1,26 @@
+name: Version Python
+
+on:
+  push:
+    branches: [main]
+    paths: ["python/**", ".github/workflows/python.yml"]
+  pull_request:
+    paths: ["python/**", ".github/workflows/python.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances de test (sans les modèles d'IA)
+        run: pip install pytest requests
+      - name: Logique (transcriptions, exercices, coach simulé, base de données)
+        run: pytest -q
+      - name: Interface (faux Streamlit, modèles simulés)
+        run: python tests/smoke_ui.py
