@@ -5,9 +5,10 @@ Coach pour pratiquer l'anglais à l'oral, **entièrement local et gratuit** : l'
 | Version | Dossier | Pour qui |
 |---|---|---|
 | **Site web** | [`web/`](web/) | Chrome ou Edge sur ordinateur. Coach plus puissant (3 à 8 milliards de paramètres), conversation libre à l'oral, analyse de prononciation, carnet de vocabulaire en répétition espacée. Publié sur GitHub Pages : https://nthimotte8.github.io/EnglishCoach/ |
+| **Version Python** | [`python/`](python/) | Sur ton ordinateur, 100 % Python (Streamlit). Transcriptions YouTube automatiques, tous les podcasts, coach MLX optimisé pour les Mac M1. Lancement : `streamlit run app.py`. |
 | **App iPhone** | [`mobile/`](mobile/) | iPhone 13 et plus récents (Expo / React Native). Coach embarqué (Qwen 2.5 1.5B), reconnaissance vocale iOS sur l'appareil. |
 
-Les deux partagent les mêmes principes :
+Les trois versions partagent les mêmes principes :
 - **les sources** : podcast, vidéo YouTube, texte collé, texte généré sur un thème ;
 - **les 5 exercices** : lecture à voix haute, répétition sans texte, reconnaissance à l'écoute, dictée, mots manquants ;
 - **le coach**, qui pose des questions, corrige et évalue le niveau CECRL ;
