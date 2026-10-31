@@ -17,7 +17,7 @@ export async function mount(view) {
     <section class="panel">
       <h2>Niveau du coach</h2>
       ${gpu.ok ? '' : html`<p class="notice">${gpu.reason}</p>`}
-      <p class="muted">Un modèle plus gros corrige mieux et évalue ton niveau plus finement, mais il demande plus de mémoire graphique et répond plus lentement. Sur un Mac M1 ou un portable avec 8 Go de mémoire, choisis « Léger ».</p>
+      <p class="muted">Un modèle plus gros corrige mieux et évalue ton niveau plus finement, mais il demande plus de mémoire graphique et répond plus lentement. Sur un Mac M1 ou un portable avec 8 Go de mémoire, garde « Léger » : un modèle plus gros peut figer tout l’ordinateur.</p>
       ${ai.state.charsPerSec ? html`<p class="hint">Vitesse mesurée sur cet ordinateur : environ ${Math.round(ai.state.charsPerSec / 6)} mots par seconde.</p>` : ''}
       <div class="stack" style="gap:8px" role="radiogroup" aria-label="Niveau du coach">
         ${ai.TIERS.map((t) => html`<label class="tier"><input type="radio" name="tier" value="${t.key}" ${t.key === tier ? 'checked' : ''}>
@@ -32,8 +32,8 @@ export async function mount(view) {
       <h2>Reconnaissance vocale</h2>
       <p class="muted">Whisper (OpenAI, open source) transcrit ta voix et les fichiers audio directement dans le navigateur. Il se télécharge à la première utilisation.</p>
       <div class="stack" style="gap:8px" role="radiogroup" aria-label="Reconnaissance vocale">
-        <label class="tier"><input type="radio" name="asr" value="rapide" ${asr === 'rapide' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Rapide</b><span class="hint">Analyse environ deux fois plus rapide, ~40 Mo. Conseillé sur un ordinateur portable ou un Mac M1.</span></span></label>
-        <label class="tier"><input type="radio" name="asr" value="precis" ${asr === 'precis' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Précis</b><span class="hint">Reconnaît mieux les accents et les mots rares, ~150 Mo.</span></span></label>
+        <label class="tier"><input type="radio" name="asr" value="rapide" ${asr === 'rapide' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Rapide</b><span class="hint">~40 Mo, tourne sur le processeur et laisse la carte graphique au coach. Conseillé sur un portable ou un Mac M1.</span></span></label>
+        <label class="tier"><input type="radio" name="asr" value="precis" ${asr === 'precis' ? 'checked' : ''}><span class="stack" style="gap:2px"><b>Précis</b><span class="hint">~150 Mo, reconnaît mieux les accents et les mots rares. Utilise la carte graphique : à éviter avec 8 Go de mémoire.</span></span></label>
       </div>
       <div class="row"><button class="btn" type="button" id="asr">Télécharger maintenant</button><span class="hint" id="asr-state"></span></div>
     </section>

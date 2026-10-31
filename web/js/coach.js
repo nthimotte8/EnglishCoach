@@ -10,7 +10,7 @@ const corrections = list(S({ original: str, better: str, why: str }), 3);
 // "reply" comes first so it can be shown and spoken while the corrections are still being written
 const turnSchema = S({ reply: str, corrections, tip: str });
 
-export function excerpt(material, maxChars = 2000) {
+export function excerpt(material, maxChars = 1500) {
   let out = '';
   for (const l of material.lines) {
     if (out.length + l.text.length > maxChars) break;
@@ -56,7 +56,7 @@ function contentSystem(material) {
 export async function contentTurn(material, history, message, onReply) {
   const r = await json([
     { role: 'system', content: contentSystem(material) },
-    ...history.slice(-8),
+    ...history.slice(-6),
     { role: 'user', content: message ? `Learner: ${message}` : 'Start with your first question. Corrections must be empty.' },
   ], turnSchema, { maxTokens: 320, temperature: 0.5, stream: 'reply', onPartial: onReply });
   return { corrections: message ? cleanCorrections(r.corrections) : [], tip: r.tip ?? '', reply: (r.reply || 'Can you tell me more?').trim() };
@@ -91,7 +91,7 @@ function roleplaySystem(sc, custom, lvl) {
 export async function roleplayTurn(sc, custom, lvl, history, message, onReply) {
   const r = await json([
     { role: 'system', content: roleplaySystem(sc, custom, lvl) },
-    ...history.slice(-10),
+    ...history.slice(-8),
     { role: 'user', content: message ? `Learner: ${message}` : `${sc.opening} Corrections must be empty.` },
   ], turnSchema, { maxTokens: 300, temperature: 0.7, stream: 'reply', onPartial: onReply });
   return { corrections: message ? cleanCorrections(r.corrections) : [], tip: r.tip ?? '', reply: (r.reply || 'Sorry, could you say that again?').trim() };
@@ -99,7 +99,7 @@ export async function roleplayTurn(sc, custom, lvl, history, message, onReply) {
 
 /* ---------------- evaluation ---------------- */
 export async function evaluate(context, learnerMessages, speech) {
-  const listing = learnerMessages.map((t, i) => `${i + 1}. ${t}`).join('\n').slice(0, 8000);
+  const listing = learnerMessages.map((t, i) => `${i + 1}. ${t}`).join('\n').slice(-3500);
   const oral = speech ? `\nSpeaking data (from speech recognition): ${speech.wpm ?? '?'} words per minute on average, ${speech.pauses} long pauses.` : '';
   const r = await json([
     { role: 'system', content: 'You are a strict but fair CEFR English examiner. Answer in JSON. "strengths", "work_on" and "summary" are written in French.' },

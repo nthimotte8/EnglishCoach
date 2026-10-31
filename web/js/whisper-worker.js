@@ -20,7 +20,9 @@ function load(id, key = 'precis') {
   if (asr && asrKey !== key) { asr.dispose?.(); asr = null; }
   if (!loading) {
     loading = (async () => {
-      const device = (await hasWebGPU()) ? 'webgpu' : 'wasm';
+      // "rapide" runs on the processor: it leaves the graphics card to the coach, so both never compete
+      // for memory (two models on the GPU of an 8 GB laptop can freeze the computer)
+      const device = key === 'precis' && (await hasWebGPU()) ? 'webgpu' : 'wasm';
       const files = {};
       const progress_callback = (p) => {
         if (p.status !== 'progress' || !p.file) return;
